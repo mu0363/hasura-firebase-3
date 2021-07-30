@@ -1,6 +1,10 @@
 import Head from "next/head";
+import { useAuth } from "src/context/auth";
+import { PrimaryButton } from "src/components/PrimaryButton";
 
-export default function Home() {
+const Home = () => {
+  const auth = useAuth();
+
   return (
     <div>
       <Head>
@@ -11,7 +15,16 @@ export default function Home() {
 
       <div>
         <h1 className="flex text-lg text-gray-600">Welcome</h1>
+        <p>{auth.user?.email}</p>
+        <div className="space-x-2">
+          <PrimaryButton onClick={auth.signInWithGoogle}>
+            Sign in with Google
+          </PrimaryButton>
+          <PrimaryButton onClick={auth.signOut}>Sign out</PrimaryButton>
+        </div>
       </div>
     </div>
   );
-}
+};
+
+export default Home;
