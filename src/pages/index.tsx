@@ -1,9 +1,24 @@
 import Head from "next/head";
+import axios from "axios";
 import { useAuth } from "src/context/auth";
 import { PrimaryButton } from "src/components/PrimaryButton";
+import { getStripe } from "src/lib/stripe";
 
 const Home = () => {
   const auth = useAuth();
+
+  const redirectToCheckout = async () => {
+    const {
+      data: { id },
+    } = await axios.post("/api/checkout_session", {
+      items: { price: "price_1JIlEoJGNqgNu47c68e5XQAW", quantity: 1 },
+    });
+
+    const stripe = await getStripe();
+    await stripe!.redirectToCheckout({
+      sessionId: id,
+    });
+  };
 
   return (
     <div>
@@ -17,10 +32,15 @@ const Home = () => {
         <h1 className="flex text-lg text-gray-600">Welcome</h1>
         <p>{auth.user?.email}</p>
         <div className="space-x-2">
-          <PrimaryButton onClick={auth.signInWithGoogle}>
+          <PrimaryButton onClick={auth.signInWithGoogle} color="bg-gray-600">
             Sign in with Google
           </PrimaryButton>
-          <PrimaryButton onClick={auth.signOut}>Sign out</PrimaryButton>
+          <PrimaryButton onClick={auth.signOut} color="bg-gray-600">
+            Sign out
+          </PrimaryButton>
+          <PrimaryButton onClick={redirectToCheckout} color="bg-indigo-500">
+            Checkout
+          </PrimaryButton>
         </div>
       </div>
     </div>
