@@ -8,9 +8,19 @@ import {
 } from "react";
 import firebase from "src/lib/firebase";
 import Cookie from "universal-cookie";
+import { createUser } from "src/lib/db";
+
+interface DBUser {
+  uid: string | null | undefined;
+  name: string | null;
+  email: string | null;
+  provider: string | undefined;
+  photoURL: string | null;
+  token: string | null;
+}
 
 interface ContextType {
-  user: firebase.User | null;
+  user: DBUser | null;
   signInWithGoogle: () => void;
   signOut: () => void;
 }
@@ -24,9 +34,45 @@ const cookie = new Cookie();
 const AuthContext = createContext<Partial<ContextType>>({});
 
 const useProviderAuth = () => {
-  const [user, setUser] = useState<firebase.User | null>(null);
+  const initialValue = {
+    uid: null,
+    name: null,
+    email: null,
+    provider: undefined,
+    photoURL: null,
+    token: null,
+  };
+  const [user, setUser] = useState<DBUser>(initialValue);
 
   const HASURA_TOKEN_KEY = "https://hasura.io/jwt/claims";
+
+  const formatUser = async (user: firebase.User) => {
+    const token = await user.getIdToken(true);
+    return {
+      uid: user.uid,
+      name: user.displayName,
+      email: user.email,
+      provider: user.providerData[0]?.providerId,
+      photoURL: user.photoURL,
+      token: token,
+      // stripeRole: (await getStripeRole()) || "free",
+    };
+  };
+
+  const handleUser = async (rawUser: firebase.User | null) => {
+    if (rawUser) {
+      const user = await formatUser(rawUser);
+      const { token, ...withOutToken } = user;
+      console.log(token);
+
+      createUser(user.uid, withOutToken);
+      setUser(user);
+      return user;
+    } else {
+      setUser(initialValue);
+      return false;
+    }
+  };
 
   const signInWithGoogle = () => {
     const provider = new firebase.auth.GoogleAuthProvider();
@@ -34,7 +80,7 @@ const useProviderAuth = () => {
       .auth()
       .signInWithPopup(provider)
       .then((result) => {
-        setUser(result.user);
+        handleUser(result.user);
       });
   };
 
@@ -43,7 +89,7 @@ const useProviderAuth = () => {
       .auth()
       .signOut()
       .then(() => {
-        setUser(null);
+        setUser(initialValue);
         cookie.remove("token");
       });
   };
@@ -56,7 +102,7 @@ const useProviderAuth = () => {
         const hasuraClaims = idTokenResult.claims[HASURA_TOKEN_KEY];
         console.log(hasuraClaims);
         if (hasuraClaims) {
-          setUser(user);
+          handleUser(user);
           cookie.set("token", token, { path: "/" });
         } else {
           const userRef = firebase

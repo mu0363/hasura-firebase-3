@@ -1,23 +1,54 @@
+import { VFC } from "react";
+import { GetServerSideProps } from "next";
 import Head from "next/head";
-import axios from "axios";
+import Image from "next/image";
+import { loadStripe } from "@stripe/stripe-js";
+import Stripe from "stripe";
+import { format } from "date-fns";
+import { createCheckoutSession } from "next-stripe/client";
 import { useAuth } from "src/context/auth";
 import { PrimaryButton } from "src/components/PrimaryButton";
-import { getStripe } from "src/lib/stripe";
+import { data } from "src/lib/data";
 
-const Home = () => {
+interface Price extends Stripe.Price {
+  product: Stripe.Product;
+}
+
+interface Props {
+  prices: Price[];
+}
+
+const Home: VFC<Props> = ({ prices }) => {
   const auth = useAuth();
+  const sampleDate = new Date();
 
-  const redirectToCheckout = async () => {
-    const {
-      data: { id },
-    } = await axios.post("/api/checkout_session", {
-      items: { price: "price_1JIlEoJGNqgNu47c68e5XQAW", quantity: 1 },
-    });
+  const formatDate = format(sampleDate, "yyyy-MM-dd");
 
-    const stripe = await getStripe();
-    await stripe!.redirectToCheckout({
-      sessionId: id,
+  const numberWithCommas = (price: number) => {
+    return price.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  };
+  const productInfo = {
+    id: prices[0].id,
+    name: prices[0].product.name,
+    description: prices[0].product.description,
+    price: numberWithCommas(prices[0].unit_amount as number),
+    image: prices[0].product.images[0],
+  };
+
+  const onCheckout = async (priceId: string) => {
+    const session = await createCheckoutSession({
+      success_url: window.location.href,
+      cancel_url: window.location.href,
+      line_items: [{ price: priceId, quantity: 1 }],
+      payment_method_types: ["card"],
+      mode: "payment",
     });
+    const stripe = await loadStripe(
+      process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY as string
+    );
+    if (stripe) {
+      stripe.redirectToCheckout({ sessionId: session.id });
+    }
   };
 
   return (
@@ -38,9 +69,58 @@ const Home = () => {
           <PrimaryButton onClick={auth.signOut} color="bg-gray-600">
             Sign out
           </PrimaryButton>
-          <PrimaryButton onClick={redirectToCheckout} color="bg-indigo-500">
+          <PrimaryButton
+            onClick={() => onCheckout(productInfo.id)}
+            color="bg-indigo-500"
+          >
             Checkout
           </PrimaryButton>
+        </div>
+        <Image
+          src="/img/photo-1524758631624-e2822e304c36.jpeg"
+          width={320}
+          height={180}
+          alt="image"
+        />
+        <Image
+          src="/img/photo-1622495892858-706d6a27b49e.jpeg"
+          width={320}
+          height={180}
+          alt="image"
+        />
+        <Image
+          src="/img/photo-1628076020326-9b24065ce18c.jpeg"
+          width={320}
+          height={180}
+          alt="image"
+          objectFit="cover"
+        />
+        {data.slice(0, 3).map((person) => {
+          return (
+            <div key={person.id}>
+              <p>{person.name}</p>
+            </div>
+          );
+        })}
+        <p>{formatDate}</p>
+        <hr />
+        <Image
+          src={productInfo.image}
+          width={200}
+          height={200}
+          alt="product image"
+        />
+        <p>{productInfo.name}</p>
+        <p>{productInfo.description}</p>
+        <p>{`¥ ${productInfo.price}`}</p>
+        <hr />
+        <div className="mt-10">
+          <iframe
+            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3243.837485610414!2d139.66418811535453!3d35.60707518021155!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x6018f51e6382d27b%3A0x621cbdede8ad8d65!2z44CSMTUyLTAwMzUg5p2x5Lqs6YO955uu6buS5Yy66Ieq55Sx44GM5LiY77yS5LiB55uu77yR77yU4oiS77yS77yQ!5e0!3m2!1sja!2sjp!4v1628138997532!5m2!1sja!2sjp"
+            width="600"
+            height="250"
+            loading="lazy"
+          ></iframe>
         </div>
       </div>
     </div>
@@ -48,3 +128,21 @@ const Home = () => {
 };
 
 export default Home;
+
+export const getServerSideProps: GetServerSideProps = async () => {
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
+    apiVersion: "2020-08-27",
+  });
+
+  const prices = await stripe.prices.list({
+    active: true,
+    limit: 10,
+    expand: ["data.product"],
+  });
+
+  return {
+    props: {
+      prices: prices.data,
+    },
+  };
+};
